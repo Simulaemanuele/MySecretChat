@@ -73,6 +73,7 @@ node_modules
 *.log
 .nvm
 package-lock.json
+.env
 
 # OS X
 .DS_Store

@@ -17,6 +17,7 @@
     "firebase": "^10.7.0",
     "react": "18.2.0",
     "react-native": "0.72.7",
+    "react-native-config": "^1.5.1",
     "react-native-device-info": "^10.12.0",
     "react-native-gesture-handler": "^2.14.0",
     "react-native-gifted-chat": "^2.4.0",
