@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     color: 'orange',
     alignSelf: 'center',
     paddingBottom: 24,
-    textShadowColor: '#000000',
+    textShadowColor: '#6b635b',
     textShadowOffset: {
       width: 2,
       height: 3,
