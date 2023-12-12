@@ -20,7 +20,8 @@ import {GiftedChat} from 'react-native-gifted-chat';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
+  const [isCurrentUserTyping, setIsCurrentUserTyping] = useState(false);
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
 
   const navigation = useNavigation();
 
@@ -82,7 +83,8 @@ const Chat = () => {
 
   const onSend = useCallback(
     async (messages = []) => {
-      setIsTyping(false);
+      setIsCurrentUserTyping(false);
+      setIsOtherUserTyping(false);
       setMessages(prevMessages => GiftedChat.append(prevMessages, messages));
 
       const {_id, createdAt, text, user} = messages[0];
@@ -97,8 +99,6 @@ const Chat = () => {
   );
 
   const handleInputTextChanged = async text => {
-    setIsTyping(text.length > 0);
-
     const currentUserEmail = auth?.currentUser?.email;
     const userDocRef = doc(database, 'users', currentUserEmail);
 
@@ -108,8 +108,17 @@ const Chat = () => {
 
       if (userDocSnapshot.exists()) {
         // If exists, update isTyping field
+        const typingUserId = messages[0]?.user?._id;
+
+        setIsOtherUserTyping(
+          text.length > 0 && typingUserId !== currentUserEmail,
+        );
+        setIsCurrentUserTyping(
+          text.length > 0 && typingUserId === currentUserEmail,
+        );
+
         await updateDoc(userDocRef, {
-          isTyping: text.length > 0,
+          isTyping: isOtherUserTyping,
         });
       } else {
         console.error('User Doc not found.');
@@ -134,7 +143,7 @@ const Chat = () => {
       messagesContainerStyle={{
         backgroundColor: colors.mediumGray,
       }}
-      isTyping={isTyping}
+      isTyping={isOtherUserTyping}
       onInputTextChanged={text => handleInputTextChanged(text)}
       showUserAvatar={true}
     />
