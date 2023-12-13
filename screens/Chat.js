@@ -10,7 +10,7 @@ import {
   doc,
   getDoc,
   setDoc,
-} from 'firebase/firestore';
+} from 'firebase/firestore'; // Importa le funzioni corrette per Firestore
 import {signOut} from 'firebase/auth';
 import {auth, database} from '../config/firebase';
 import {useNavigation} from '@react-navigation/native';
@@ -20,10 +20,38 @@ import {GiftedChat} from 'react-native-gifted-chat';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
-  const [isCurrentUserTyping, setIsCurrentUserTyping] = useState(false);
-  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
 
   const navigation = useNavigation();
+
+  useEffect(() => {
+    const chatRef = collection(database, 'chats'); // Usa collection() per accedere a una collezione Firestore
+
+    // Aggiungi un listener per rilevare quando qualcuno sta scrivendo
+    const unsubscribeTyping = onSnapshot(chatRef, snapshot => {
+      setIsTyping(snapshot.docs[0]?.data()?.isTyping || false);
+    });
+
+    // Aggiungi un listener per ricevere i messaggi
+    const messagesRef = collection(database, 'chats');
+    const queryRef = query(messagesRef, orderBy('createdAt', 'desc'));
+    const unsubscribeMessages = onSnapshot(queryRef, snapshot => {
+      setMessages(
+        snapshot.docs.map(doc => ({
+          _id: doc.id,
+          createdAt: doc.data().createdAt.toDate(),
+          text: doc.data().text,
+          user: doc.data().user,
+        })),
+      );
+    });
+
+    return () => {
+      // Rimuovi i listener quando il componente viene smontato
+      unsubscribeTyping();
+      unsubscribeMessages();
+    };
+  }, []);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -62,38 +90,20 @@ const Chat = () => {
     initializeUserDoc();
   }, []);
 
-  useLayoutEffect(() => {
-    const collectionRef = collection(database, 'chats');
-    const queryRef = query(collectionRef, orderBy('createdAt', 'desc'));
-
-    const unsubscribe = onSnapshot(queryRef, snapshot => {
-      console.log('snapshot');
-      setMessages(
-        snapshot.docs.map(doc => ({
-          _id: doc.id,
-          createdAt: doc.data().createdAt.toDate(),
-          text: doc.data().text,
-          user: doc.data().user,
-        })),
-      );
-    });
-
-    return () => unsubscribe();
-  }, []);
-
   const onSend = useCallback(
-    async (messages = []) => {
-      setIsCurrentUserTyping(false);
-      setIsOtherUserTyping(false);
-      setMessages(prevMessages => GiftedChat.append(prevMessages, messages));
+    async (newMessages = []) => {
+      setMessages(prevMessages => GiftedChat.append(prevMessages, newMessages));
 
-      const {_id, createdAt, text, user} = messages[0];
+      const {_id, createdAt, text, user} = newMessages[0];
       await addDoc(collection(database, 'chats'), {
         _id,
         createdAt,
         text,
         user,
       });
+
+      const chatRef = doc(database, 'users', currentUserEmail); // Aggiungi l'ID del documento di chat
+      await updateDoc(chatRef, {isTyping: false});
     },
     [setMessages],
   );
@@ -110,16 +120,17 @@ const Chat = () => {
         // If exists, update isTyping field
         const typingUserId = messages[0]?.user?._id;
 
-        setIsOtherUserTyping(
-          text.length > 0 && typingUserId !== currentUserEmail,
-        );
-        setIsCurrentUserTyping(
-          text.length > 0 && typingUserId === currentUserEmail,
-        );
+        const isOtherUserTyping =
+          text.length > 0 && typingUserId !== currentUserEmail;
+        const isCurrentUserTyping =
+          text.length > 0 && typingUserId === currentUserEmail;
 
         await updateDoc(userDocRef, {
           isTyping: isOtherUserTyping,
         });
+
+        const chatRef = doc(database, 'users', currentUserEmail); // Aggiungi l'ID del documento di chat
+        await updateDoc(chatRef, {isTyping: isCurrentUserTyping});
       } else {
         console.error('User Doc not found.');
       }
@@ -143,7 +154,7 @@ const Chat = () => {
       messagesContainerStyle={{
         backgroundColor: colors.mediumGray,
       }}
-      isTyping={isOtherUserTyping}
+      isTyping={isTyping}
       onInputTextChanged={text => handleInputTextChanged(text)}
       showUserAvatar={true}
     />
