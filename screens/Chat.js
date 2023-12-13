@@ -10,7 +10,7 @@ import {
   doc,
   getDoc,
   setDoc,
-} from 'firebase/firestore'; // Importa le funzioni corrette per Firestore
+} from 'firebase/firestore';
 import {signOut} from 'firebase/auth';
 import {auth, database} from '../config/firebase';
 import {useNavigation} from '@react-navigation/native';
@@ -21,18 +21,30 @@ import {GiftedChat} from 'react-native-gifted-chat';
 const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [typingUserId, setTypingUserId] = useState(null); // Aggiunto stato per memorizzare l'ID dell'utente che sta scrivendo
 
   const navigation = useNavigation();
 
   useEffect(() => {
-    const chatRef = collection(database, 'chats'); // Usa collection() per accedere a una collezione Firestore
+    const chatRef = collection(database, 'chats');
 
-    // Aggiungi un listener per rilevare quando qualcuno sta scrivendo
     const unsubscribeTyping = onSnapshot(chatRef, snapshot => {
-      setIsTyping(snapshot.docs[0]?.data()?.isTyping || false);
+      // Verifica se l'utente corrente sta scrivendo o se è un altro utente
+      const currentUserEmail = auth?.currentUser?.email;
+      const currentUserId = messages[0]?.user?._id;
+
+      if (
+        snapshot.docs[0]?.data()?.isTyping &&
+        currentUserId !== currentUserEmail
+      ) {
+        setIsTyping(true);
+        setTypingUserId(currentUserId);
+      } else {
+        setIsTyping(false);
+        setTypingUserId(null);
+      }
     });
 
-    // Aggiungi un listener per ricevere i messaggi
     const messagesRef = collection(database, 'chats');
     const queryRef = query(messagesRef, orderBy('createdAt', 'desc'));
     const unsubscribeMessages = onSnapshot(queryRef, snapshot => {
@@ -47,11 +59,10 @@ const Chat = () => {
     });
 
     return () => {
-      // Rimuovi i listener quando il componente viene smontato
       unsubscribeTyping();
       unsubscribeMessages();
     };
-  }, []);
+  }, [messages]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -67,17 +78,14 @@ const Chat = () => {
       ),
     });
 
-    // Verifica se il documento utente esiste al mount del componente
     const initializeUserDoc = async () => {
       const currentUserEmail = auth?.currentUser?.email;
       const userDocRef = doc(database, 'users', currentUserEmail);
 
       try {
-        // snapshot of the user doc
         const userDocSnapshot = await getDoc(userDocRef);
 
         if (!userDocSnapshot.exists()) {
-          // If not exists create it
           await setDoc(userDocRef, {
             isTyping: false,
           });
@@ -102,7 +110,7 @@ const Chat = () => {
         user,
       });
 
-      const chatRef = doc(database, 'users', currentUserEmail); // Aggiungi l'ID del documento di chat
+      const chatRef = doc(database, 'users', auth?.currentUser?.email);
       await updateDoc(chatRef, {isTyping: false});
     },
     [setMessages],
@@ -113,24 +121,19 @@ const Chat = () => {
     const userDocRef = doc(database, 'users', currentUserEmail);
 
     try {
-      // Verify is the doc exists before the update
       const userDocSnapshot = await getDoc(userDocRef);
 
       if (userDocSnapshot.exists()) {
-        // If exists, update isTyping field
-        const typingUserId = messages[0]?.user?._id;
-
+        const currentUserId = messages[0]?.user?._id;
         const isOtherUserTyping =
-          text.length > 0 && typingUserId !== currentUserEmail;
-        const isCurrentUserTyping =
-          text.length > 0 && typingUserId === currentUserEmail;
+          text.length > 0 && currentUserId !== currentUserEmail;
 
         await updateDoc(userDocRef, {
           isTyping: isOtherUserTyping,
         });
 
-        const chatRef = doc(database, 'users', currentUserEmail); // Aggiungi l'ID del documento di chat
-        await updateDoc(chatRef, {isTyping: isCurrentUserTyping});
+        const chatRef = doc(database, 'users', currentUserEmail);
+        await updateDoc(chatRef, {isTyping: text.length > 0});
       } else {
         console.error('User Doc not found.');
       }
